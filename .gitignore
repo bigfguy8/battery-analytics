@@ -1,0 +1,21 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+app/build/
+
+# Release signing (never commit)
+keystore.properties
+*.jks
+*.keystore
+
+# Kotlin compiler caches (Kotlin 1.9+)
+.kotlin/
+
+# Termux-local tooling artifacts
+.tmp/
+*.log

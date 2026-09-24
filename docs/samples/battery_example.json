@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "exported_at": "2026-09-23T15:50:00Z",
+  "exported_at_ms": 1758642600000,
+  "metadata": {
+    "app_version": "0.5.0-phase5",
+    "manufacturer": "samsung",
+    "model": "SM-M346B",
+    "device": "m34x",
+    "android_sdk": 36,
+    "android_release": "16"
+  },
+  "capabilities": [
+    {
+      "metric_key": "soc",
+      "available": true,
+      "source": "API",
+      "unit": "PERCENT",
+      "confidence": "HIGH",
+      "method": "BatteryManager.BATTERY_PROPERTY_CAPACITY",
+      "first_seen_ms": 1758600000000,
+      "last_probed_ms": 1758642600000
+    },
+    {
+      "metric_key": "current_now",
+      "available": true,
+      "source": "API",
+      "unit": "AMP",
+      "confidence": "HIGH",
+      "method": "BatteryManager.BATTERY_PROPERTY_CURRENT_NOW (µA)",
+      "first_seen_ms": 1758600000000,
+      "last_probed_ms": 1758642600000
+    },
+    {
+      "metric_key": "charge_full_design",
+      "available": false,
+      "source": "UNAVAILABLE",
+      "unit": "AMPHOUR",
+      "confidence": "UNAVAILABLE",
+      "method": "no sysfs charge_full_design",
+      "first_seen_ms": 1758600000000,
+      "last_probed_ms": 1758642600000
+    }
+  ],
+  "sessions": [
+    {
+      "id": 1,
+      "start_ms": 1758636000000,
+      "start_iso": "2026-09-23T14:00:00Z",
+      "end_ms": 1758641400000,
+      "end_iso": "2026-09-23T15:30:00Z",
+      "soc_start": 35,
+      "soc_end": 82,
+      "charge_ah": 2.146000,
+      "energy_wh": 8.734000,
+      "plug_type": "USB",
+      "peak_power_w": 14.620000,
+      "avg_power_w": 9.410000,
+      "temp_min_c": 31.200000,
+      "temp_mean_c": 33.500000,
+      "temp_max_c": 36.100000,
+      "quality": "CLEAN",
+      "taper_json": "{\"30\":1.44,\"40\":1.51,\"50\":1.19,\"60\":0.85,\"70\":0.62,\"80\":0.28}"
+    }
+  ],
+  "latest_snapshot": {
+    "ts_ms": 1758642600000,
+    "soc_pct": 38,
+    "voltage_v": 3.786000,
+    "current_now_a": 0.054300,
+    "current_avg_a": 0.042100,
+    "power_w": 0.205600,
+    "temp_c": 33.800000,
+    "charge_counter_ah": 2.284000,
+    "cycle_count": 0,
+    "status": "CHARGING",
+    "plug_type": "USB"
+  },
+  "samples": [
+    {
+      "id": 1,
+      "ts_ms": 1758642492000,
+      "soc_pct": 37,
+      "voltage_v": 3.777000,
+      "current_a": -0.000600,
+      "power_w": -0.002300,
+      "temp_c": 33.600000,
+      "status": "DISCHARGING",
+      "plug": "NONE",
+      "source_flags": 5,
+      "quality_flags": 0
+    },
+    {
+      "id": 6,
+      "ts_ms": 1758642517000,
+      "soc_pct": 38,
+      "voltage_v": 3.784000,
+      "current_a": 0.051200,
+      "power_w": 0.193700,
+      "temp_c": 33.700000,
+      "status": "CHARGING",
+      "plug": "USB",
+      "source_flags": 5,
+      "quality_flags": 0
+    }
+  ]
+}

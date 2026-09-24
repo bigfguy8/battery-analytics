@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Only share files from the app-private exports directory.
+         No external storage is exposed. -->
+    <files-path name="exports" path="exports/" />
+</paths>

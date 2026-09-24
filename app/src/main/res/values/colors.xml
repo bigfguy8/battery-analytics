@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches GlassColors.BaseBackgroundBottom in code, so the transition
+         from splash to first Compose frame is seamless. -->
+    <color name="splash_background">#0A0A0F</color>
+</resources>

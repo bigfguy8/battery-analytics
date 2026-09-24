@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Post-splash theme. Compose takes over drawing immediately; this
+         theme only controls the brief window before first frame. -->
+    <style name="Theme.BatteryAnalytics" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <!-- Splash theme. Extends the androidx.core:core-splashscreen theme.
+         windowSplashScreenAnimatedIcon reuses our adaptive-icon foreground
+         so the splash glyph matches the launcher icon. -->
+    <style name="Theme.BatteryAnalytics.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenAnimationDuration">400</item>
+        <item name="postSplashScreenTheme">@style/Theme.BatteryAnalytics</item>
+    </style>
+
+</resources>

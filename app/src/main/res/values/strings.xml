@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Battery Analytics</string>
+    <string name="notif_channel_name">Battery monitoring</string>
+    <string name="notif_channel_desc">Persistent notification shown while background sampling is enabled.</string>
+    <string name="notif_title">Battery Analytics</string>
+    <string name="notif_text_initial">Sampling battery state in background</string>
+    <string name="notif_text_waiting">Waiting for first reading</string>
+</resources>

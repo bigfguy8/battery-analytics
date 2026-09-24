@@ -1,0 +1,12 @@
+# Normalize line endings in the repo. Android/Gradle files should always
+# be LF on disk, even if a future contributor works on Windows.
+* text=auto eol=lf
+
+# Binary-ish files that should not be touched
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.jar binary
+*.keystore binary
+*.jks binary

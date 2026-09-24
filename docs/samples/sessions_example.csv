@@ -1,0 +1,3 @@
+id,start_iso,start_ms,end_iso,end_ms,soc_start,soc_end,charge_ah,energy_wh,plug_type,peak_power_w,avg_power_w,temp_min_c,temp_mean_c,temp_max_c,quality,taper_json
+1,2026-09-23T14:00:00Z,1758636000000,2026-09-23T15:30:00Z,1758641400000,35,82,2.146,8.734,USB,14.62,9.41,31.2,33.5,36.1,CLEAN,"{""30"":1.44,""40"":1.51,""50"":1.19,""60"":0.85,""70"":0.62,""80"":0.28}"
+2,2026-09-23T16:15:00Z,1758644100000,,,82,,0.000,0.000,USB,,,32.9,33.1,33.4,PARTIAL,

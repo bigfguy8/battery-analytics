@@ -159,24 +159,43 @@ fun DashboardScreen(
                         "Current (avg)" -> CurrentFormat.format(m.value as? Double)
                         else -> null
                     }
-                    val minLbl: String? = when (label) {
-                        "Current (now)" -> currentWindow.minOrNull()?.let { CurrentFormat.format(it) }
-                        "Power" -> powerWindow.minOrNull()?.let { PowerFormat.format(it) }
+                    // Compact-rate label for the Current tile: a plain-word
+                    // state (idle / standby / light use / active use / heavy
+                    // use / charging) plus a percent-per-hour figure the user
+                    // can reason about. Computed from current_avg and the
+                    // estimated full capacity; labelled "~" because both
+                    // inputs are themselves derived.
+                    val rateLbl: String? = when (label) {
+                        "Current (now)" -> computeCurrentRateLabel(s)
                         else -> null
                     }
-                    val maxLbl: String? = when (label) {
-                        "Current (now)" -> currentWindow.maxOrNull()?.let { CurrentFormat.format(it) }
-                        "Power" -> powerWindow.maxOrNull()?.let { PowerFormat.format(it) }
+                    // Only show the min/max strip when the window has actually
+                    // varied. When min == max the strip is just noise.
+                    val minV = when (label) {
+                        "Current (now)" -> currentWindow.minOrNull()
+                        "Power" -> powerWindow.minOrNull()
                         else -> null
                     }
+                    val maxV = when (label) {
+                        "Current (now)" -> currentWindow.maxOrNull()
+                        "Power" -> powerWindow.maxOrNull()
+                        else -> null
+                    }
+                    val hasRange = minV != null && maxV != null &&
+                        kotlin.math.abs(maxV - minV) > 1e-4
+                    val rangeLbl: String? = if (hasRange) when (label) {
+                        "Current (now)" -> CurrentFormat.formatRange(minV!!, maxV!!)
+                        "Power" -> PowerFormat.formatRange(minV!!, maxV!!)
+                        else -> null
+                    } else null
                     MetricTile(
                         label = label,
                         metric = m,
                         accent = defaultAccentFor(label),
                         modifier = Modifier.weight(1f),
                         displayOverride = override,
-                        minLabel = minLbl,
-                        maxLabel = maxLbl
+                        rateLabel = rateLbl,
+                        rangeLabel = rangeLbl
                     ) { dialogFor = label to m }
                 }
                 if (rowStart + 1 > primary.lastIndex) Spacer(Modifier.weight(1f))
@@ -325,6 +344,74 @@ private fun StatusChip(
     }
 }
 
+/**
+ * Percent-per-hour rate for the Current tile, with a plain-word state.
+ *
+ * Rate is computed from current_avg and the estimated full capacity, both
+ * derived values. It is prefixed with "~" for that reason. Discharge is
+ * negative, charge is positive; the state word names the regime.
+ *
+ * Below 20 mA (idle / standby), we skip the numeric rate: the underlying
+ * measurement is dominated by standby leakage and the extrapolation is noise.
+ */
+/**
+ * A short caveat shown in the Voltage detail dialog.
+ *
+ * On some devices, notably Samsung's, the value returned by
+ * BatteryManager.EXTRA_VOLTAGE is the charger-rail voltage, not the cell
+ * voltage. That is why a phone at 50% SOC can report 4.2 V, which would be
+ * unusual for a Li-ion cell at that charge level. We cannot disambiguate
+ * from inside the app; the honest move is to say so.
+ */
+private fun voltageNote(label: String): String? {
+    if (label != "Voltage") return null
+    val mfr = android.os.Build.MANUFACTURER ?: ""
+    return if (mfr.contains("samsung", ignoreCase = true)) {
+        "On Samsung devices, this value may report the charger rail rather " +
+            "than the cell. A reading above 4.1 V at mid charge is normal here."
+    } else {
+        "On some devices, this value may report the charger rail rather " +
+            "than the cell voltage."
+    }
+}
+
+private fun computeCurrentRateLabel(
+    s: com.example.batteryanalytics.domain.model.BatterySnapshot
+): String? {
+    val current = s.currentAvgA.value ?: return null
+    val fullAh = com.example.batteryanalytics.domain.estimate.CapacityEstimator
+        .estimateFullCapacityAh(s.chargeCounterAh, s.soc)
+        .value
+        ?: com.example.batteryanalytics.domain.estimate.CapacityEstimator
+            .estimateFullCapacityFromSessions(emptyList())
+            .value
+        ?: return null
+    if (fullAh <= 0.0) return null
+
+    val mA = kotlin.math.abs(current) * 1000.0
+    val pctPerHour = current / fullAh * 100.0
+    val absPct = kotlin.math.abs(pctPerHour)
+
+    val state = when {
+        mA < 20.0 -> "idle"
+        absPct < 5.0  -> if (pctPerHour > 0) "trickle charge" else "standby"
+        absPct < 20.0 -> if (pctPerHour > 0) "charging"       else "light use"
+        absPct < 50.0 -> if (pctPerHour > 0) "fast charge"    else "active use"
+        else          -> if (pctPerHour > 0) "super fast"     else "heavy use"
+    }
+
+    val rateStr: String = when {
+        mA < 20.0    -> ""
+        absPct < 0.1 -> "< 0.1 %/hr"
+        absPct < 10  -> "%.2f %%/hr".format(pctPerHour)
+        else         -> "%.1f %%/hr".format(pctPerHour)
+    }
+    return if (rateStr.isEmpty()) "~ $state" else "~ $state \u00B7 $rateStr"
+}
+
+private fun String.format(vararg args: Any): String =
+    java.lang.String.format(java.util.Locale.US, this, *args)
+
 @Composable
 private fun MetricDetailDialog(label: String, metric: Metric<*>, onDismiss: () -> Unit) {
     AlertDialog(
@@ -342,6 +429,14 @@ private fun MetricDetailDialog(label: String, metric: Metric<*>, onDismiss: () -
                     Spacer(Modifier.height(8.dp))
                     Text("Raw sysfs value:")
                     Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+                voltageNote(label)?.let { note ->
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

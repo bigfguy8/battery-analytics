@@ -7,12 +7,13 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -26,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.res.painterResource
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.example.batteryanalytics.data.prefs.Prefs
 import com.example.batteryanalytics.service.BatteryMonitorService
 import com.example.batteryanalytics.service.SamplingController
@@ -39,11 +42,15 @@ import com.example.batteryanalytics.ui.theme.BatteryAnalyticsTheme
 import com.example.batteryanalytics.ui.theme.GlassColors
 import com.example.batteryanalytics.ui.theme.Palette
 
-private enum class Tab(val label: String, val accent: ComposeColor) {
-    DASHBOARD("Dash",     Palette.NavDash),
-    HISTORY("History",    Palette.NavHistory),
-    SESSIONS("Sessions",  Palette.NavSessions),
-    HEALTH("Health",      Palette.ChipGreen)
+private enum class Tab(
+    val label: String,
+    val accent: ComposeColor,
+    @DrawableRes val icon: Int
+) {
+    DASHBOARD("Dash",     Palette.NavDash,     R.drawable.ic_tab_dash),
+    HISTORY("History",    Palette.NavHistory,  R.drawable.ic_tab_history),
+    SESSIONS("Sessions",  Palette.NavSessions, R.drawable.ic_tab_sessions),
+    HEALTH("Health",      Palette.ChipGreen,   R.drawable.ic_tab_health)
 }
 
 class MainActivity : ComponentActivity() {
@@ -52,10 +59,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var prefs: Prefs
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Install the splash screen before super.onCreate so the theme swap
-        // happens cleanly. Dismissal is on first frame by default; we do not
-        // delay it, because the sampling engine starts in onStart and the
-        // dashboard already renders its own empty state.
         installSplashScreen()
         super.onCreate(savedInstanceState)
         controller = SamplingController.get(applicationContext)
@@ -73,8 +76,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // If the user has opted into background monitoring, make sure the
-        // service is running. Starting an already-running service is a no-op.
         if (prefs.backgroundMonitoringEnabled) {
             BatteryMonitorService.start(this)
         }
@@ -83,15 +84,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        // The controller flushes and stops the engine only when no other
-        // holder (i.e. the background service) is still active.
         controller.onUiBackground()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        // Idempotent: if the process is being torn down and the service is
-        // gone, this stops the engine. Otherwise it is a no-op.
         controller.onUiBackground()
     }
 }
@@ -102,7 +99,6 @@ private fun AppRoot(controller: SamplingController) {
     var showSettings by remember { mutableStateOf(false) }
     var showDiagnostics by remember { mutableStateOf(false) }
 
-    // System back closes the deepest overlay first.
     BackHandler(enabled = showDiagnostics) { showDiagnostics = false }
     BackHandler(enabled = showSettings && !showDiagnostics) { showSettings = false }
 
@@ -189,7 +185,12 @@ private fun RowScope.NavItem(
     NavigationBarItem(
         selected = selected,
         onClick = onClick,
-        icon = {},
+        icon = {
+            Icon(
+                painter = painterResource(tab.icon),
+                contentDescription = tab.label
+            )
+        },
         label = { Text(tab.label, maxLines = 1) },
         colors = NavigationBarItemDefaults.colors(
             selectedIconColor = tab.accent,

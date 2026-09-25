@@ -116,7 +116,8 @@ fun HistoryScreen(repository: BatteryRepository) {
                 thresholds = listOf(
                     20.0 to GlassColors.TextTertiary,
                     80.0 to GlassColors.TextTertiary
-                )
+                ),
+                smoothingWindow = 3
             )
         }
         GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -126,7 +127,11 @@ fun HistoryScreen(repository: BatteryRepository) {
                 color = chartColor,
                 label = "Power (battery side)",
                 unit = "W",
-                thresholds = listOf(0.0 to GlassColors.TextSecondary)
+                thresholds = listOf(0.0 to GlassColors.TextSecondary),
+                // Retention keeps extrema, not means. A 5-point moving
+                // average hides the resulting sawtooth without hiding real
+                // trends. Rendering only; the underlying data is unchanged.
+                smoothingWindow = 5
             )
         }
         GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -136,7 +141,8 @@ fun HistoryScreen(repository: BatteryRepository) {
                 color = chartColor,
                 label = "Temperature",
                 unit = "\u00B0C",
-                thresholds = listOf(40.0 to tempCaution, 45.0 to tempWarn)
+                thresholds = listOf(40.0 to tempCaution, 45.0 to tempWarn),
+                smoothingWindow = 3
             )
             Spacer(Modifier.height(4.dp))
             Text(

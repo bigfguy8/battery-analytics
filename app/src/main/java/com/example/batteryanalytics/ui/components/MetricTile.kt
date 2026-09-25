@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,8 +35,8 @@ fun MetricTile(
     accent: Color,
     modifier: Modifier = Modifier,
     displayOverride: String? = null,
-    minLabel: String? = null,
-    maxLabel: String? = null,
+    rateLabel: String? = null,
+    rangeLabel: String? = null,
     onClick: () -> Unit = {}
 ) {
     val available = metric.isAvailable
@@ -64,29 +63,37 @@ fun MetricTile(
             )
         }
         Spacer(Modifier.height(4.dp))
+        // For unavailable metrics show an em-dash rather than the truncated
+        // "Not available on th...". The sub-label already reads "not exposed",
+        // and the full literal string is shown in the tile detail dialog.
+        // Metric.display() itself is unchanged and still returns the
+        // spec-mandated "Not available on this device".
+        val primaryText = displayOverride
+            ?: if (available) metric.display() else "\u2014"
         Text(
-            displayOverride ?: metric.display(),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+            primaryText,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
             color = if (available) GlassColors.TextPrimary else GlassColors.TextTertiary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
         if (available) {
-            Text(
-                "${metric.source.short()} · ${metric.confidence.short()}",
-                style = MaterialTheme.typography.labelSmall,
-                color = accent.copy(alpha = 0.85f)
-            )
-            if (minLabel != null || maxLabel != null) {
+            if (rateLabel != null) {
                 Text(
-                    buildString {
-                        if (minLabel != null) append("min $minLabel")
-                        if (minLabel != null && maxLabel != null) append("   ")
-                        if (maxLabel != null) append("max $maxLabel")
-                    },
+                    rateLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = accent.copy(alpha = 0.95f),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            if (rangeLabel != null) {
+                Text(
+                    rangeLabel,
                     style = MaterialTheme.typography.labelSmall,
-                    color = GlassColors.TextTertiary
+                    color = GlassColors.TextTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         } else {
@@ -104,17 +111,17 @@ private fun Source.short(): String = when (this) {
     Source.SYSFS -> "sysfs"
     Source.CALCULATED -> "calc"
     Source.ESTIMATED -> "est"
-    Source.UNAVAILABLE -> "—"
+    Source.UNAVAILABLE -> "\u2014"
 }
 
 private fun Confidence.short(): String = when (this) {
     Confidence.HIGH -> "hi"
     Confidence.MEDIUM -> "med"
     Confidence.LOW -> "lo"
-    Confidence.UNAVAILABLE -> "—"
+    Confidence.UNAVAILABLE -> "\u2014"
 }
 
-/** Convenience: default accent per metric key. Falls back to voltage blue. */
+/** Convenience: default accent per metric label. Falls back to voltage blue. */
 fun defaultAccentFor(label: String): Color = when (label) {
     "State of charge" -> Palette.SoC
     "Temperature" -> Palette.Temperature

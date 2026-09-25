@@ -1,8 +1,7 @@
 package com.example.batteryanalytics.ui.history
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -10,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -23,8 +21,11 @@ import java.util.Locale
  * Compact summary of the last N days, one row per day. Reads the precomputed
  * daily_rollups table, so it is cheap regardless of how many raw samples exist.
  *
- * Every field is shown as "—" when null. Never as 0. A day with no data is
- * simply absent from the list, and the caption says so.
+ * Every field is shown as an em-dash when null OR when the value carries no
+ * information. A day with 0.00 Ah discharged is a day when the phone was on
+ * the charger all day, or barely used: the meaningful answer is "no discharge
+ * happened", not "0.00 Ah". Same reasoning for 0.00 average temperature,
+ * which cannot physically occur and therefore means "no data".
  */
 @Composable
 fun DailySummaryStrip(rollups: List<DailyRollup>) {
@@ -45,18 +46,13 @@ fun DailySummaryStrip(rollups: List<DailyRollup>) {
             HeaderCell("Ah out", 0.9f)
         }
         Spacer(Modifier.height(4.dp))
-        for (r in rollups) Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-            val date = formatDate(r.dateYyyymmdd)
-            BodyCell(date, 1.2f)
-            val soc = when {
-                r.minSoc != null && r.maxSoc != null ->
-                    if (r.minSoc == r.maxSoc) "${r.minSoc}%"
-                    else "${r.minSoc}–${r.maxSoc}%"
-                else -> "—"
+        for (r in rollups) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                BodyCell(formatDate(r.dateYyyymmdd), 1.2f)
+                BodyCell(socRange(r), 1.4f)
+                BodyCell(tempCell(r.avgTempC), 0.9f)
+                BodyCell(ahCell(r.dischargeAh), 0.9f)
             }
-            BodyCell(soc, 1.4f)
-            BodyCell(r.avgTempC?.let { "%.1f°".format(it) } ?: "—", 0.9f)
-            BodyCell(r.dischargeAh?.let { "%.2f".format(it) } ?: "—", 0.9f)
         }
         Spacer(Modifier.height(4.dp))
         Text(
@@ -67,8 +63,27 @@ fun DailySummaryStrip(rollups: List<DailyRollup>) {
     }
 }
 
+private fun socRange(r: DailyRollup): String = when {
+    r.minSoc == null || r.maxSoc == null -> "\u2014"
+    r.minSoc == r.maxSoc -> "${r.minSoc}%"
+    else -> "${r.minSoc}\u2013${r.maxSoc}%"
+}
+
+private fun tempCell(v: Double?): String {
+    // 0.0 °C is not a plausible battery temperature; treat it as no data.
+    if (v == null || v == 0.0) return "\u2014"
+    return String.format(Locale.US, "%.1f\u00B0", v)
+}
+
+private fun ahCell(v: Double?): String {
+    // 0.00 Ah discharged means the phone was charging or idle all day.
+    // The honest answer is "no discharge", not "0.00".
+    if (v == null || v == 0.0) return "\u2014"
+    return String.format(Locale.US, "%.2f", v)
+}
+
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.HeaderCell(text: String, weight: Float) {
+private fun RowScope.HeaderCell(text: String, weight: Float) {
     Text(
         text,
         style = MaterialTheme.typography.labelSmall,
@@ -78,7 +93,7 @@ private fun androidx.compose.foundation.layout.RowScope.HeaderCell(text: String,
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.BodyCell(text: String, weight: Float) {
+private fun RowScope.BodyCell(text: String, weight: Float) {
     Text(
         text,
         style = MaterialTheme.typography.bodySmall,
@@ -93,6 +108,3 @@ private fun formatDate(yyyymmdd: Int): String {
     val d = yyyymmdd % 100
     return String.format(Locale.US, "%04d-%02d-%02d", y, m, d)
 }
-
-private fun String.format(vararg args: Any): String =
-    String.format(Locale.US, this, *args)

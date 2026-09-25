@@ -1,6 +1,7 @@
 package com.example.batteryanalytics.ui.health
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,8 +16,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -27,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.batteryanalytics.data.prefs.Prefs
@@ -38,6 +43,7 @@ import com.example.batteryanalytics.domain.model.Confidence
 import com.example.batteryanalytics.domain.model.Metric
 import com.example.batteryanalytics.domain.model.SessionRow
 import com.example.batteryanalytics.domain.model.Source
+import com.example.batteryanalytics.domain.model.Unit as MetricUnit
 import com.example.batteryanalytics.ui.components.GlassCard
 import com.example.batteryanalytics.ui.theme.GlassColors
 import com.example.batteryanalytics.ui.theme.Palette
@@ -56,11 +62,16 @@ fun HealthScreen(
     val snapshot by snapshots.collectAsState()
     var sessions by remember { mutableStateOf<List<SessionRow>>(emptyList()) }
     var firstSeenMs by remember { mutableStateOf<Long?>(null) }
+    var dialogFor by remember { mutableStateOf<Pair<String, Metric<*>>?>(null) }
 
     LaunchedEffect(Unit) {
         sessions = withContext(Dispatchers.IO) { repository.recentSessions(200) }
         val caps = withContext(Dispatchers.IO) { repository.capabilities() }
         firstSeenMs = caps.minOfOrNull { it.firstSeenTs }
+    }
+
+    dialogFor?.let { (label, m) ->
+        MetricDetailDialog(label = label, metric = m) { dialogFor = null }
     }
 
     val s = snapshot
@@ -82,6 +93,11 @@ fun HealthScreen(
             style = MaterialTheme.typography.bodySmall,
             color = GlassColors.TextSecondary
         )
+        Text(
+            "Tap any card for source, confidence, and method.",
+            style = MaterialTheme.typography.bodySmall,
+            color = GlassColors.TextTertiary
+        )
 
         if (s == null) {
             Text("Reading\u2026", color = GlassColors.TextSecondary)
@@ -91,72 +107,35 @@ fun HealthScreen(
         // Compute capacity from both sources
         val fromCounter = CapacityEstimator.estimateFullCapacityAh(s.chargeCounterAh, s.soc)
         val fromSessions = CapacityEstimator.estimateFullCapacityFromSessions(sessions)
-        // Prefer sessions when available: more stable than a single-point extrapolation
         val selectedFull = if (fromSessions.isAvailable) fromSessions else fromCounter
-        val design = s.chargeFullDesignAh
-        // Computed later, after designForHealth is resolved
-        // (kept for reference only; the real call is after the design block)
+        val deviceDesign = s.chargeFullDesignAh
 
-        // Estimated full capacity
-        HealthBlock(
-            title = "Estimated full-charge capacity",
-            primary = selectedFull,
-            secondaryLabel = if (fromSessions.isAvailable)
-                "from ${sessions.count { it.chargeAh != null }} sessions"
-            else "single-point extrapolation"
-        )
-
-        // Design capacity — prefer device; fall back to user-supplied rated capacity
-        val context = androidx.compose.ui.platform.LocalContext.current
+        // Device design capacity, with a fallback to a user-supplied rated
+        // value from Settings when the firmware does not expose one.
+        val context = LocalContext.current
         val prefs = remember { Prefs(context) }
         val manualMah = prefs.ratedCapacityMah
 
-        val designForHealth: com.example.batteryanalytics.domain.model.Metric<Double> =
-            if (design.isAvailable) design
-            else if (manualMah != null) com.example.batteryanalytics.domain.model.Metric(
+        val designForHealth: Metric<Double> =
+            if (deviceDesign.isAvailable) deviceDesign
+            else if (manualMah != null) Metric(
                 value = manualMah / 1000.0,
                 source = Source.CALCULATED,
                 confidence = Confidence.LOW,
                 method = "user-supplied rated capacity ($manualMah mAh)",
-                unit = com.example.batteryanalytics.domain.model.Unit.AMPHOUR
+                unit = MetricUnit.AMPHOUR
             )
-            else design
+            else deviceDesign
 
-        HealthBlock(
-            title = "Design capacity",
-            primary = designForHealth,
-            secondaryLabel = when {
-                design.isAvailable -> "provided by firmware"
-                manualMah != null -> "user-supplied, not read from device"
-                else -> "device does not expose it; add it in Settings if you know it"
-            }
-        )
-
-        // Health %
         val healthPctFinal = CapacityEstimator.healthPercent(selectedFull, designForHealth)
-        HealthBlock(
-            title = "Estimated battery capacity health",
-            primary = healthPctFinal,
-            secondaryLabel = if (healthPctFinal.isAvailable)
-                "estimated_full / design \u00D7 100"
-            else healthPctFinal.method
-        )
 
-        // Cycles
         val cycles = CycleEstimator.estimate(
             sysfsCycle = Metric.unavailable("no readable sysfs cycle_count on this device"),
             apiCycle = s.cycleCount,
             sessions = sessions,
-            designCapacityAh = design
-        )
-        HealthBlock(
-            title = "Cycle count",
-            primary = cycles,
-            secondaryLabel = if (cycles.isAvailable) cycles.method
-                            else cycles.method
+            designCapacityAh = designForHealth
         )
 
-        // Age
         val ageMetric: Metric<String> = if (firstSeenMs != null) {
             val days = (System.currentTimeMillis() - firstSeenMs!!) / (24L * 3600_000L)
             val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -165,16 +144,49 @@ fun HealthScreen(
                 source = Source.CALCULATED,
                 confidence = Confidence.HIGH,
                 method = "now \u2212 first_seen_ts (persisted in device_capabilities)",
-                unit = com.example.batteryanalytics.domain.model.Unit.NONE
+                unit = MetricUnit.NONE
             )
         } else {
             Metric.unavailable("capabilities have not been persisted yet")
         }
+
+        HealthBlock(
+            title = "Estimated full-charge capacity",
+            primary = selectedFull,
+            secondaryLabel = if (fromSessions.isAvailable)
+                "from ${sessions.count { it.chargeAh != null }} sessions"
+            else "single-point extrapolation"
+        ) { dialogFor = "Estimated full-charge capacity" to selectedFull }
+
+        HealthBlock(
+            title = "Design capacity",
+            primary = designForHealth,
+            secondaryLabel = when {
+                deviceDesign.isAvailable -> "provided by firmware"
+                manualMah != null -> "user-supplied, not read from device"
+                else -> "device does not expose it; add it in Settings if you know it"
+            }
+        ) { dialogFor = "Design capacity" to designForHealth }
+
+        HealthBlock(
+            title = "Estimated battery capacity health",
+            primary = healthPctFinal,
+            secondaryLabel = if (healthPctFinal.isAvailable)
+                "estimated_full / design \u00D7 100"
+            else healthPctFinal.method
+        ) { dialogFor = "Estimated battery capacity health" to healthPctFinal }
+
+        HealthBlock(
+            title = "Cycle count",
+            primary = cycles,
+            secondaryLabel = cycles.method
+        ) { dialogFor = "Cycle count" to cycles }
+
         HealthBlock(
             title = "App-tracked age",
             primary = ageMetric,
             secondaryLabel = "since the app first probed this device"
-        )
+        ) { dialogFor = "App-tracked age" to ageMetric }
 
         // Confidence legend
         Spacer(Modifier.height(4.dp))
@@ -204,7 +216,8 @@ fun HealthScreen(
 private fun HealthBlock(
     title: String,
     primary: Metric<*>,
-    secondaryLabel: String
+    secondaryLabel: String,
+    onClick: () -> Unit
 ) {
     val available = primary.isAvailable
     val accent = when (primary.source) {
@@ -214,7 +227,7 @@ private fun HealthBlock(
         Source.ESTIMATED -> Palette.Temperature
         Source.UNAVAILABLE -> GlassColors.TextTertiary
     }
-    GlassCard(modifier = Modifier.fillMaxWidth()) {
+    GlassCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier
@@ -232,16 +245,11 @@ private fun HealthBlock(
         Spacer(Modifier.height(6.dp))
         Text(
             primary.display(),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
             color = if (available) GlassColors.TextPrimary else GlassColors.TextTertiary
         )
-        Text(
-            if (available) "${primary.source.name}  \u00B7  ${primary.confidence.name}"
-            else "UNAVAILABLE",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (available) accent.copy(alpha = 0.85f) else GlassColors.TextTertiary
-        )
+        Spacer(Modifier.height(2.dp))
         Text(
             secondaryLabel,
             style = MaterialTheme.typography.labelSmall,
@@ -258,7 +266,7 @@ private fun HealthBlock(
 }
 
 @Composable
-private fun LegendRow(color: androidx.compose.ui.graphics.Color, level: String, description: String) {
+private fun LegendRow(color: Color, level: String, description: String) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
         verticalAlignment = Alignment.Top
@@ -285,4 +293,27 @@ private fun LegendRow(color: androidx.compose.ui.graphics.Color, level: String, 
             )
         }
     }
+}
+
+@Composable
+private fun MetricDetailDialog(label: String, metric: Metric<*>, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        title = { Text(label) },
+        text = {
+            Column {
+                Text("Value: ${metric.display()}")
+                Text("Source: ${metric.source.name}")
+                Text("Confidence: ${metric.confidence.name}")
+                Text("Unit: ${metric.unit.label.ifEmpty { "(none)" }}")
+                Text("Method: ${metric.method}")
+                metric.rawString?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Raw sysfs value:")
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    )
 }

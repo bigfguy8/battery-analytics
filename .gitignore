@@ -19,3 +19,7 @@ keystore.properties
 # Termux-local tooling artifacts
 .tmp/
 *.log
+
+# Generated checksum output (release notes carry the hash)
+SHA256.txt
+.backup/

@@ -18,6 +18,23 @@ import kotlin.math.roundToInt
  */
 object DischargeEtaEstimator {
 
+    /**
+     * Minimum |current| trusted for a discharge ETA, in amperes. 20 mA is
+     * about the point below which the phone is effectively on standby: the
+     * cell's self-discharge, the RTC, and radios in deep sleep dominate, and
+     * extrapolating a multi-day ETA from a momentary reading produces garbage
+     * (we observed a real 7071-hour reading at -1.0 mA).
+     */
+    const val MIN_TRUSTED_CURRENT_A: Double = 0.02
+
+    /**
+     * Maximum ETA reported, in minutes. 7 days is generous: below that
+     * threshold the "time remaining" is still a meaningful statement.
+     * Anything longer is not actionable, and the underlying reading is not
+     * representative of real usage.
+     */
+    const val MAX_REASONABLE_ETA_MIN: Int = 7 * 24 * 60
+
     data class Result(
         val targetPct: Int,
         val minutes: Int?,
@@ -54,18 +71,33 @@ object DischargeEtaEstimator {
                 "at or below target")
         }
         val magnitude = abs(current)
-        if (magnitude < 1e-6) {
-            return Result(targetPct, null, Source.UNAVAILABLE,
-                Confidence.UNAVAILABLE, "average current too small to extrapolate")
+        if (magnitude < MIN_TRUSTED_CURRENT_A) {
+            val reason = if (magnitude < 1e-6)
+                "no measurable discharge current"
+            else
+                "measured %.1f mA is below the %.0f mA floor; phone is on standby"
+                    .format(magnitude * 1000.0, MIN_TRUSTED_CURRENT_A * 1000.0)
+            return Result(targetPct, null, Source.UNAVAILABLE, Confidence.UNAVAILABLE, reason)
         }
         val remainingAh = full * (socVal - targetPct) / 100.0
         val hours = remainingAh / magnitude
+        val minutes = (hours * 60.0).roundToInt()
+        if (minutes > MAX_REASONABLE_ETA_MIN) {
+            return Result(
+                targetPct, null, Source.UNAVAILABLE, Confidence.UNAVAILABLE,
+                "computed ETA %.0f h exceeds %.0f h cap; reading not representative"
+                    .format(minutes / 60.0, MAX_REASONABLE_ETA_MIN / 60.0)
+            )
+        }
         return Result(
             targetPct,
-            (hours * 60.0).roundToInt(),
+            minutes,
             Source.ESTIMATED,
             Confidence.MEDIUM,
             "remaining_ah / |current_avg|; assumes average discharge rate holds"
         )
     }
 }
+
+private fun String.format(vararg args: Any): String =
+    java.lang.String.format(java.util.Locale.US, this, *args)

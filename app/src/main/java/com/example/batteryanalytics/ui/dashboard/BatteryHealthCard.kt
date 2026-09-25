@@ -90,8 +90,6 @@ fun BatteryHealthCard(
             HealthSubTile(
                 label = "Reported",
                 value = snapshot.health.display(),
-                source = snapshot.health.source,
-                confidence = snapshot.health.confidence,
                 accent = reportedAccent,
                 modifier = Modifier.weight(1f)
             ) { onMetricClick("Reported health", snapshot.health) }
@@ -99,8 +97,6 @@ fun BatteryHealthCard(
             HealthSubTile(
                 label = "Est. full capacity",
                 value = fullCapDisplay(fullCap),
-                source = fullCap.source,
-                confidence = fullCap.confidence,
                 accent = Palette.ChargeCounter,
                 modifier = Modifier.weight(1f)
             ) { onMetricClick("Est. full capacity", fullCap) }
@@ -187,8 +183,6 @@ fun BatteryHealthCard(
 private fun HealthSubTile(
     label: String,
     value: String,
-    source: Source,
-    confidence: Confidence,
     accent: Color,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
@@ -207,14 +201,9 @@ private fun HealthSubTile(
         Spacer(Modifier.height(2.dp))
         Text(
             value,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
             color = GlassColors.TextPrimary
-        )
-        Text(
-            "${source.short()} · ${confidence.short()}",
-            style = MaterialTheme.typography.labelSmall,
-            color = accent.copy(alpha = 0.85f)
         )
     }
 }

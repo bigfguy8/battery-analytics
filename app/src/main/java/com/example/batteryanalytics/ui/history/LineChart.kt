@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.batteryanalytics.domain.model.TelemetrySample
@@ -31,7 +32,13 @@ import com.example.batteryanalytics.domain.model.TelemetrySample
  * of an empty box.
  *
  * [thresholds] is a list of (value, color) pairs drawn as horizontal dashed
- * lines, used for the temperature caution levels.
+ * lines, used for the temperature caution levels and the zero line on power.
+ *
+ * [smoothingWindow] applies a centered moving average of that width to the
+ * y-values before drawing. Default 1 means no smoothing. A window of 3 or 5
+ * visibly reduces the visual noise that comes from our retention policy
+ * keeping extrema rather than means in downsampled buckets. It does not
+ * change the underlying data; it only changes how it is rendered.
  */
 @Composable
 fun LineChart(
@@ -41,12 +48,14 @@ fun LineChart(
     label: String,
     unit: String,
     modifier: Modifier = Modifier,
-    height: androidx.compose.ui.unit.Dp = 130.dp,
-    thresholds: List<Pair<Double, Color>> = emptyList()
+    height: Dp = 130.dp,
+    thresholds: List<Pair<Double, Color>> = emptyList(),
+    smoothingWindow: Int = 1
 ) {
-    val points = samples.mapNotNull { s ->
+    val raw = samples.mapNotNull { s ->
         selector(s)?.let { v -> s.tsMs to v }
     }
+    val points = smooth(raw, smoothingWindow)
     val textMeasurer = rememberTextMeasurer()
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -80,7 +89,10 @@ fun LineChart(
         val vSpan = vMax - vMin
 
         val axisColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-        val labelStyle = TextStyle(fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val labelStyle = TextStyle(
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
         Canvas(Modifier.fillMaxWidth().height(height)) {
             val padLeft = 42.dp.toPx()
@@ -96,11 +108,9 @@ fun LineChart(
             fun yFor(v: Double): Float =
                 padTop + ((vMax - v) / vSpan * h).toFloat()
 
-            // Axis lines
-            drawLine(axisColor, Offset(padLeft, padTop), Offset(padLeft, padTop + h), strokeWidth = 1f)
-            drawLine(axisColor, Offset(padLeft, padTop + h), Offset(padLeft + w, padTop + h), strokeWidth = 1f)
+            drawLine(axisColor, Offset(padLeft, padTop), Offset(padLeft, padTop + h), 1f)
+            drawLine(axisColor, Offset(padLeft, padTop + h), Offset(padLeft + w, padTop + h), 1f)
 
-            // Thresholds (dashed)
             for ((thr, thrColor) in thresholds) {
                 if (thr < vMin || thr > vMax) continue
                 val y = yFor(thr)
@@ -113,27 +123,24 @@ fun LineChart(
                 )
             }
 
-            // Path, broken at gaps
             val path = Path()
             var started = false
             var prevSampleTs: Long? = null
             val maxGapMs = ((tMax - tMin) / 200).coerceAtLeast(60_000L)
-            for (s in samples) {
-                val v = selector(s) ?: continue
-                val px = xFor(s.tsMs)
+            for ((ts, v) in points) {
+                val px = xFor(ts)
                 val py = yFor(v)
-                val gapTooBig = prevSampleTs?.let { (s.tsMs - it) > maxGapMs } == true
+                val gapTooBig = prevSampleTs?.let { (ts - it) > maxGapMs } == true
                 if (!started || gapTooBig) {
                     path.moveTo(px, py)
                     started = true
                 } else {
                     path.lineTo(px, py)
                 }
-                prevSampleTs = s.tsMs
+                prevSampleTs = ts
             }
             drawPath(path, color = color, style = Stroke(width = 2f))
 
-            // Y-axis min/max labels
             val span = vMax - vMin
             drawText(
                 textMeasurer = textMeasurer,
@@ -148,7 +155,6 @@ fun LineChart(
                 style = labelStyle
             )
 
-            // X-axis endpoints (HH:mm:ss or date)
             val fmt = java.text.SimpleDateFormat(
                 if (tSpan > 36L * 3600_000L) "MM-dd" else "HH:mm",
                 java.util.Locale.US
@@ -176,31 +182,37 @@ fun LineChart(
     }
 }
 
-/** Small helper so internal format specifiers stay Locale.US. */
-private fun String.format(vararg args: Any): String =
-    java.lang.String.format(java.util.Locale.US, this, *args)
-
 /**
- * Format a chart axis label with enough precision to distinguish two values
- * that are close together. Uses the span between vMin and vMax to choose
- * decimals; falls back to scientific notation for tiny spans.
- *
- * Rule of thumb:
- *   span >= 10     -> 1 decimal  (e.g. SoC in %)
- *   span >= 1      -> 2 decimals (e.g. voltage, current)
- *   span >= 0.1    -> 3 decimals
- *   span >= 0.01   -> 4 decimals
- *   span >= 0.001  -> 5 decimals
- *   else           -> scientific notation, 2 mantissa decimals
+ * Apply a centered moving average to the y-values. Timestamps are preserved
+ * exactly. A window of 1 or less returns the input unchanged.
  */
+private fun smooth(
+    points: List<Pair<Long, Double>>,
+    window: Int
+): List<Pair<Long, Double>> {
+    if (window <= 1 || points.size < 3) return points
+    val half = window / 2
+    return points.mapIndexed { i, (ts, _) ->
+        var sum = 0.0
+        var count = 0
+        for (j in (i - half)..(i + half)) {
+            if (j in points.indices) {
+                sum += points[j].second
+                count++
+            }
+        }
+        ts to (sum / count)
+    }
+}
+
 private fun formatAxisValue(v: Double, span: Double): String {
-    val a = kotlin.math.abs(v)
     if (span >= 10.0)   return "%.1f".format(v)
     if (span >= 1.0)    return "%.2f".format(v)
     if (span >= 0.1)    return "%.3f".format(v)
     if (span >= 0.01)   return "%.4f".format(v)
     if (span >= 0.001)  return "%.5f".format(v)
-    // Absolute value below 1 mV / 1 mW etc. Show in scientific notation.
     return "%.2e".format(v)
 }
 
+private fun String.format(vararg args: Any): String =
+    java.lang.String.format(java.util.Locale.US, this, *args)

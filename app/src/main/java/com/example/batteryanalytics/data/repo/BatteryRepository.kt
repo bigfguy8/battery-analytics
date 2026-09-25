@@ -159,8 +159,13 @@ class BatteryRepository(context: Context) {
                 dateYyyymmdd = dateYyyymmdd,
                 minSoc = socs.minOrNull(),
                 maxSoc = socs.maxOrNull(),
+                // Null when nothing was recorded; a 0.0 average would be
+                // indistinguishable from a real reading at freezing.
                 avgTempC = if (temps.isEmpty()) null else temps.average(),
-                dischargeAh = if (anyCurrent) dischargeAh else null,
+                // Null when no discharge happened. Storing 0.0 would make
+                // "phone was on the charger all day" look identical to
+                // "the discharge integral genuinely summed to zero".
+                dischargeAh = if (anyCurrent && dischargeAh > 0.0) dischargeAh else null,
                 sampleCount = samples.size.toLong()
             )
         )
